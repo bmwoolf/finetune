@@ -1,14 +1,11 @@
-# finetune
+# Fine Tuning ESM2
 
-Fine-tune ESM2 to classify proteins.
-
-
-ESM2 outputs representations- which are embeddings you can use for downstream tasks (classification, regression, PTM site prediction).
-
-We can use the `transformers` library because ESM2 looks like NLP with 1D sparse vectors as outputs, we can't use it on AlphaFold/Boltz because their outputs look like geometric physics.
+1. rebuild dlfb package 
+2. fine-tune for classifying proteins
+3. rebuild in Rust
 
 
-## running
+## Running
 ```bash
 uv sync
 uv run python main.py
