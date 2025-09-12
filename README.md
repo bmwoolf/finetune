@@ -7,6 +7,9 @@
 
 ## Running
 ```bash
+# install packages in pyproject.toml
 uv sync
+
+# execute the finetuning training loop and run an analysis
 uv run python main.py
 ```
