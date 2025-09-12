@@ -207,4 +207,4 @@ marimo/_lsp/
 __marimo__/
 
 /notebooks/dlfb-main/
-/finetune/data
+/finetune/data/data/
