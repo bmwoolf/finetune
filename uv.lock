@@ -218,6 +218,11 @@ wheels = [
 ]
 
 [[package]]
+name = "dlfb"
+version = "0.1.1"
+source = { git = "https://github.com/deep-learning-for-biology/dlfb.git#d9b230aed966eb9be5fd394079e2ed78ecab0e22" }
+
+[[package]]
 name = "etils"
 version = "1.13.0"
 source = { registry = "https://pypi.org/simple" }
@@ -251,6 +256,7 @@ name = "finetune"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "dlfb" },
     { name = "flax" },
     { name = "jax" },
     { name = "jaxlib" },
@@ -270,6 +276,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "dlfb", git = "https://github.com/deep-learning-for-biology/dlfb.git" },
     { name = "flax", specifier = ">=0.7.0" },
     { name = "jax", specifier = ">=0.4.0" },
     { name = "jaxlib", specifier = ">=0.4.0" },
