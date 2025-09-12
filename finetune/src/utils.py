@@ -4,6 +4,11 @@ import os
 import torch
 from pathlib import Path
 
+# Set up paths for local environment
+BASE_DIR = Path(__file__).parent.parent.parent  # Go up to project root
+DATA_DIR = BASE_DIR / "data"
+MODELS_DIR = BASE_DIR / "models"
+
 # general utilities
 def assets(subdir: str = None) -> str:
     """Get path to assets directory."""

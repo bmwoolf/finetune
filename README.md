@@ -10,6 +10,11 @@
 # install packages in pyproject.toml
 uv sync
 
+# install datasets
+cd src/ && mkdir data
+uv run dlfb-provision --chapter proteins --destination ./data
+
 # execute the finetuning training loop and run an analysis
+cd ../
 uv run python main.py
 ```

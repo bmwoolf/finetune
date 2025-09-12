@@ -27,9 +27,6 @@ from .src.utils import assets
 
 # Set up paths for local environment
 BASE_DIR = Path(__file__).parent.parent  # Go up one level from finetune/ to project root
-DATA_DIR = BASE_DIR / "data"
-MODELS_DIR = BASE_DIR / "models"
-os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(MODELS_DIR, exist_ok=True)
 
 
