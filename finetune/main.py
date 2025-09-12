@@ -5,6 +5,9 @@ import numpy as np
 import pandas as pd
 import jax
 import jax.numpy as jnp
+import torch
+import optax
+from pathlib import Path
 from sklearn.model_selection import train_test_split
 from transformers import AutoTokenizer, EsmModel
 from .src.data import (
