@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-"""
-Chapter 2: Learning the Language of Proteins
-Rebuilt from the original notebook, adapted for local environment.
-"""
 
 import os
 import math
@@ -26,7 +22,7 @@ import seaborn as sns
 from flax.training.train_state import TrainState
 
 # Set up paths for local environment
-BASE_DIR = Path(__file__).parent
+BASE_DIR = Path(__file__).parent.parent  # Go up one level from finetune/ to project root
 DATA_DIR = BASE_DIR / "data"
 MODELS_DIR = BASE_DIR / "models"
 os.makedirs(DATA_DIR, exist_ok=True)
