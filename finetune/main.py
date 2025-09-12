@@ -1,25 +1,26 @@
 #!/usr/bin/env python3
 
 import os
-import math
-import obonet
 import numpy as np
 import pandas as pd
-import torch
 import jax
 import jax.numpy as jnp
-import flax.linen as nn
-import optax
-import tensorflow as tf
-from pathlib import Path
-from typing import Dict, List, Tuple, Optional
 from sklearn.model_selection import train_test_split
-from sklearn import metrics
-from transformers import AutoTokenizer, EsmModel, EsmForMaskedLM
-from tqdm import tqdm
-import matplotlib.pyplot as plt
-import seaborn as sns
-from flax.training.train_state import TrainState
+from transformers import AutoTokenizer, EsmModel
+from .src.data import (
+    get_go_term_descriptions,
+    store_sequence_embeddings,
+    load_sequence_embeddings
+)
+from .src.model import (
+    Model,
+    convert_to_tfds,
+    compute_metrics,
+    train_step,
+    eval_step,
+    train
+)
+from .src.utils import assets
 
 # Set up paths for local environment
 BASE_DIR = Path(__file__).parent.parent  # Go up one level from finetune/ to project root
@@ -28,270 +29,10 @@ MODELS_DIR = BASE_DIR / "models"
 os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(MODELS_DIR, exist_ok=True)
 
-# =============================================================================
-# DLFB UTILITIES (Recreated from original package)
-# =============================================================================
 
-def assets(subdir: str = None) -> str:
-    """Get path to assets directory."""
-    assets_dir = str(DATA_DIR)
-    if subdir:
-        assets_dir = os.path.join(assets_dir, subdir)
-    return assets_dir
-
-def get_device() -> torch.device:
-    """Get available device (GPU or CPU)."""
-    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-def print_short_dict(d, max_items=10, width=80):
-    """Print dictionary with truncation."""
-    import textwrap
-    from itertools import islice
-    
-    shown = list(islice(d.items(), max_items))
-    remaining = len(d) - len(shown)
-    preview = {k: v for k, v in shown}
-    s = str(preview)
-    wrapped_lines = textwrap.wrap(s, width=width)
-    for line in wrapped_lines:
-        print(line)
-    if remaining > 0:
-        print(f"…(+{remaining} more entries)")
-
-# =============================================================================
-# PROTEIN DATA HANDLING
-# =============================================================================
-
-def get_go_term_descriptions(store_path: str) -> pd.DataFrame:
-    """Return GO term to description mapping, downloading if needed."""
-    if not os.path.exists(store_path):
-        url = "https://current.geneontology.org/ontology/go-basic.obo"
-        graph = obonet.read_obo(url)
-        
-        # Extract GO term IDs and names from the graph nodes.
-        id_to_name = {id: data.get("name") for id, data in graph.nodes(data=True)}
-        go_term_descriptions = pd.DataFrame(
-            zip(id_to_name.keys(), id_to_name.values()),
-            columns=["term", "description"],
-        )
-        go_term_descriptions.to_csv(store_path, index=False)
-    else:
-        go_term_descriptions = pd.read_csv(store_path)
-    return go_term_descriptions
-
-def get_mean_embeddings(
-    sequences: List[str],
-    tokenizer,
-    model,
-    device: torch.device = None,
-) -> np.ndarray:
-    """Compute mean embedding for each sequence using a protein LM."""
-    if not device:
-        device = get_device()
-
-    # Tokenize input sequences and pad them to equal length.
-    model_inputs = tokenizer(sequences, padding=True, return_tensors="pt")
-
-    # Move tokenized inputs to the target device (CPU or GPU).
-    model_inputs = {k: v.to(device) for k, v in model_inputs.items()}
-
-    # Move model to the target device and set it to evaluation mode.
-    model = model.to(device)
-    model.eval()
-
-    # Forward pass without gradient tracking to obtain embeddings.
-    with torch.no_grad():
-        outputs = model(**model_inputs)
-        mean_embeddings = outputs.last_hidden_state.mean(dim=1)
-
-    return mean_embeddings.detach().cpu().numpy()
-
-def store_sequence_embeddings(
-    sequence_df: pd.DataFrame,
-    store_prefix: str,
-    tokenizer,
-    model,
-    batch_size: int = 64,
-    force: bool = False,
-) -> None:
-    """Extract and store mean embeddings for each protein sequence."""
-    model_name = str(model.name_or_path).replace("/", "_")
-    store_file = f"{store_prefix}_{model_name}.feather"
-
-    if not os.path.exists(store_file) or force:
-        device = get_device()
-
-        # Iterate through protein dataframe in batches, extracting embeddings.
-        n_batches = math.ceil(sequence_df.shape[0] / batch_size)
-        batches: List[np.ndarray] = []
-        for i in range(n_batches):
-            batch_seqs = list(
-                sequence_df["Sequence"][i * batch_size : (i + 1) * batch_size]
-            )
-            batches.extend(get_mean_embeddings(batch_seqs, tokenizer, model, device))
-
-        # Store each of the embedding values in a separate column in the dataframe.
-        embeddings = pd.DataFrame(np.vstack(batches))
-        embeddings.columns = [f"ME:{int(i)+1}" for i in range(embeddings.shape[1])]
-        df = pd.concat([sequence_df.reset_index(drop=True), embeddings], axis=1)
-        df.to_feather(store_file)
-
-def load_sequence_embeddings(
-    store_file_prefix: str, model_checkpoint: str
-) -> pd.DataFrame:
-    """Load stored embedding DataFrame from disk."""
-    model_name = model_checkpoint.replace("/", "_")
-    store_file = f"{store_file_prefix}_{model_name}.feather"
-    return pd.read_feather(store_file)
-
-# =============================================================================
-# MODEL ARCHITECTURE
-# =============================================================================
-
-class Model(nn.Module):
-    """Simple MLP for protein function prediction."""
-    
-    num_targets: int
-    dim: int = 256
-
-    @nn.compact
-    def __call__(self, x):
-        """Apply MLP layers to input features."""
-        x = nn.Sequential([
-            nn.Dense(self.dim * 2),
-            jax.nn.gelu,
-            nn.Dense(self.dim),
-            jax.nn.gelu,
-            nn.Dense(self.num_targets),
-        ])(x)
-        return x
-
-    def create_train_state(self, rng: jax.Array, dummy_input, tx) -> TrainState:
-        """Initialize model parameters and return a training state."""
-        variables = self.init(rng, dummy_input)
-        return TrainState.create(
-            apply_fn=self.apply, params=variables["params"], tx=tx
-        )
-
-# =============================================================================
-# TRAINING UTILITIES
-# =============================================================================
-
-def convert_to_tfds(
-    df: pd.DataFrame,
-    embeddings_prefix: str = "ME:",
-    target_prefix: str = "GO:",
-    is_training: bool = False,
-    shuffle_buffer: int = 50,
-) -> tf.data.Dataset:
-    """Convert embedding DataFrame into a TensorFlow dataset."""
-    dataset = tf.data.Dataset.from_tensor_slices({
-        "embedding": df.filter(regex=f"^{embeddings_prefix}").to_numpy(),
-        "target": df.filter(regex=f"^{target_prefix}").to_numpy(),
-    })
-    if is_training:
-        dataset = dataset.shuffle(shuffle_buffer).repeat()
-    return dataset
-
-def compute_metrics(
-    targets: np.ndarray, probs: np.ndarray, thresh=0.5
-) -> Dict[str, float]:
-    """Compute accuracy, recall, precision, auPRC, and auROC."""
-    if np.sum(targets) == 0:
-        return {
-            m: 0.0 for m in ["accuracy", "recall", "precision", "auprc", "auroc"]
-        }
-    return {
-        "accuracy": metrics.accuracy_score(targets, probs >= thresh),
-        "recall": metrics.recall_score(targets, probs >= thresh).item(),
-        "precision": metrics.precision_score(
-            targets,
-            probs >= thresh,
-            zero_division=0.0,
-        ).item(),
-        "auprc": metrics.average_precision_score(targets, probs).item(),
-        "auroc": metrics.roc_auc_score(targets, probs).item(),
-    }
-
-@jax.jit
-def train_step(state, batch):
-    """Run a single training step and update model parameters."""
-    
-    def calculate_loss(params):
-        """Compute sigmoid cross-entropy loss from logits."""
-        logits = state.apply_fn({"params": params}, x=batch["embedding"])
-        loss = optax.sigmoid_binary_cross_entropy(logits, batch["target"]).mean()
-        return loss
-
-    grad_fn = jax.value_and_grad(calculate_loss, has_aux=False)
-    loss, grads = grad_fn(state.params)
-    state = state.apply_gradients(grads=grads)
-    return state, loss
-
-def eval_step(state, batch) -> Dict[str, float]:
-    """Run evaluation step and return mean metrics over targets."""
-    logits = state.apply_fn({"params": state.params}, x=batch["embedding"])
-    loss = optax.sigmoid_binary_cross_entropy(logits, batch["target"]).mean()
-    
-    # Calculate per-target metrics
-    probs = jax.nn.sigmoid(logits)
-    target_metrics = []
-    for target, prob in zip(batch["target"], probs):
-        target_metrics.append(compute_metrics(target, prob))
-    
-    metrics_dict = {
-        "loss": loss.item(),
-        **pd.DataFrame(target_metrics).mean(axis=0).to_dict(),
-    }
-    return metrics_dict
-
-def train(
-    state: TrainState,
-    dataset_splits: Dict[str, tf.data.Dataset],
-    batch_size: int,
-    num_steps: int = 300,
-    eval_every: int = 30,
-):
-    """Train model using batched TF datasets and track performance metrics."""
-    # Create containers to handle calculated during training and evaluation.
-    train_metrics, valid_metrics = [], []
-
-    # Create batched dataset to pluck batches from for each step.
-    train_batches = (
-        dataset_splits["train"]
-        .batch(batch_size, drop_remainder=True)
-        .as_numpy_iterator()
-    )
-
-    steps = tqdm(range(num_steps))  # Steps with progress bar.
-    for step in steps:
-        steps.set_description(f"Step {step + 1}")
-
-        # Get batch of training data, convert into a JAX array, and train.
-        state, loss = train_step(state, next(train_batches))
-        train_metrics.append({"step": step, "loss": loss.item()})
-
-        if step % eval_every == 0:
-            # For all the evaluation batches, calculate metrics.
-            eval_metrics = []
-            for eval_batch in (
-                dataset_splits["valid"].batch(batch_size=batch_size).as_numpy_iterator()
-            ):
-                eval_metrics.append(eval_step(state, eval_batch))
-            valid_metrics.append(
-                {"step": step, **pd.DataFrame(eval_metrics).mean(axis=0).to_dict()}
-            )
-
-    return state, {"train": train_metrics, "valid": valid_metrics}
-
-# =============================================================================
-# MAIN EXECUTION (Following Chapter 2 Flow)
-# =============================================================================
-
+# execution pipeline
 def main():
-    print("=== Chapter 2: Learning the Language of Proteins ===")
-    
-    # Set random seeds for reproducibility
+    # set random seeds for reproducibility
     np.random.seed(42)
     torch.manual_seed(42)
     jax.random.PRNGKey(42)
