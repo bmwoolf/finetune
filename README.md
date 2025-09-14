@@ -15,7 +15,7 @@ uv sync
 2. Install datasets:
 ```bash
 cd example/ && mkdir -p data
-uv run dlfb-provision --chapter proteins --destination ./data
+uv run dlfb-provision --chapter proteins --destination ./data && cd ..
 ```
 
 ## GPU Setup
