@@ -5,9 +5,9 @@ import torch
 from pathlib import Path
 
 # Set up paths for local environment
-BASE_DIR = Path(__file__).parent.parent.parent  # Go up to project root
-DATA_DIR = BASE_DIR / "data"
-MODELS_DIR = BASE_DIR / "models"
+BASE_DIR = Path(__file__).parent.parent  # Go up to project root (tools -> finetune)
+DATA_DIR = BASE_DIR / "example" / "data"  # Data is now in example/data
+MODELS_DIR = BASE_DIR / "example" / "models"  # Models are now in example/models
 
 # general utilities
 def assets(subdir: str = None) -> str:

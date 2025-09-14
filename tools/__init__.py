@@ -5,8 +5,7 @@ This package provides functionality for training protein function prediction mod
 using ESM2 embeddings and JAX/Flax.
 """
 
-from .main import main
-from .src.data import (
+from .data import (
     get_go_term_descriptions,
     load_cafa3_data,
     create_train_valid_test_splits,
@@ -15,11 +14,10 @@ from .src.data import (
     load_sequence_embeddings,
     get_mean_embeddings
 )
-from .src.model import Model
+from .model import Model
 
 __version__ = "0.1.0"
 __all__ = [
-    "main", 
     "Model", 
     "get_go_term_descriptions",
     "load_cafa3_data",

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import os
+import sys
 import numpy as np
 import pandas as pd
 import jax
@@ -8,7 +9,11 @@ import jax.numpy as jnp
 import torch
 import optax
 from pathlib import Path
-from .src.data import (
+
+# Add the parent directory to the path so we can import tools
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from tools.data import (
     get_go_term_descriptions,
     load_cafa3_data,
     create_train_valid_test_splits,
@@ -17,7 +22,7 @@ from .src.data import (
     load_sequence_embeddings,
     get_mean_embeddings
 )
-from .src.model import (
+from tools.model import (
     Model,
     convert_to_tfds,
     compute_metrics,
@@ -25,7 +30,7 @@ from .src.model import (
     eval_step,
     train
 )
-from .src.utils import assets, get_device, DATA_DIR
+from tools.utils import assets, get_device, DATA_DIR
 
 # set up paths for local environment
 BASE_DIR = Path(__file__).parent.parent
@@ -39,11 +44,11 @@ def main():
     jax.random.PRNGKey(42)
     
     # data preparation
-    data_dir = os.path.join(DATA_DIR, "proteins", "datasets")
+    data_dir = os.path.join(str(DATA_DIR), "proteins", "datasets")
     
     # load GO term descriptions
     go_term_descriptions = get_go_term_descriptions(
-        os.path.join(data_dir, "go_term_descriptions.csv")
+        os.path.join(str(DATA_DIR), "go_term_descriptions.csv")
     )
     print(f"Loaded {len(go_term_descriptions)} GO term descriptions")
     
