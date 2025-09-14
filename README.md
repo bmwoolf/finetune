@@ -1,3 +1,5 @@
+![Banner](assets/github_banner.png)
+
 # Fine Tuning ESM2
 
 A protein function prediction system that fine-tunes ESM2 embeddings using JAX/Flax for multi-label classification of protein functions.
