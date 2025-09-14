@@ -1,9 +1,8 @@
 ![Banner](assets/github_banner.png)
 
-# Fine Tuning ESM2
+# Finetuning Toolkit
 
-A protein function prediction system that fine-tunes ESM2 embeddings using JAX/Flax for multi-label classification of protein functions.
-
+A finetuning toolkit for working with protein models like ESM2. Uses JAX/Flax for multi-label classification of protein functions. Currently uses the dataset + function inspiration from the book ![Deep Learning for Biology](https://deep-learning-for-biology.com/).
 
 ## Installation
 
