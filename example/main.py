@@ -28,9 +28,9 @@ from .src.model import (
 from .src.utils import assets, get_device, DATA_DIR
 
 # set up paths for local environment
-BASE_DIR = Path(__file__).parent.parent  # Go up one level from finetune/ to project root
+BASE_DIR = Path(__file__).parent.parent
 os.makedirs(DATA_DIR, exist_ok=True)
-os.makedirs(BASE_DIR / "models", exist_ok=True)
+os.makedirs(BASE_DIR / "example/models", exist_ok=True)
 
 def main():
     # set random seeds for reproducibility
