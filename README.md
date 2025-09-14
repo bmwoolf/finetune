@@ -37,7 +37,7 @@ uv add jax-cuda12-plugin --extra-index-url https://storage.googleapis.com/jax-re
 
 ## Usage
 
-### Running the Training
+### Training with GPU
 
 ```bash
 # Run with GPU support (recommended)
@@ -47,7 +47,7 @@ XLA_FLAGS=--xla_gpu_cuda_data_dir=/tmp/cuda_data uv run python example/main.py
 XLA_FLAGS=--xla_gpu_cuda_data_dir=/tmp/cuda_data uv run finetune
 ```
 
-### CPU-only Mode (if needed)
+### Training with CPU-only (if needed)
 
 ```bash
 # Run with CPU fallback
