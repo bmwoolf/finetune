@@ -8,12 +8,14 @@ import jax.numpy as jnp
 import torch
 import optax
 from pathlib import Path
-from sklearn.model_selection import train_test_split
-from transformers import AutoTokenizer, EsmModel
 from .src.data import (
     get_go_term_descriptions,
+    load_cafa3_data,
+    create_train_valid_test_splits,
+    generate_embeddings,
     store_sequence_embeddings,
-    load_sequence_embeddings
+    load_sequence_embeddings,
+    get_mean_embeddings
 )
 from .src.model import (
     Model,
@@ -23,187 +25,88 @@ from .src.model import (
     eval_step,
     train
 )
-from .src.utils import assets
+from .src.utils import assets, get_device, DATA_DIR
 
-# Set up paths for local environment
+# set up paths for local environment
 BASE_DIR = Path(__file__).parent.parent  # Go up one level from finetune/ to project root
-os.makedirs(MODELS_DIR, exist_ok=True)
+os.makedirs(DATA_DIR, exist_ok=True)
+os.makedirs(BASE_DIR / "models", exist_ok=True)
 
-
-# execution pipeline
 def main():
     # set random seeds for reproducibility
     np.random.seed(42)
     torch.manual_seed(42)
     jax.random.PRNGKey(42)
     
-    # =============================================================================
-    # 2.4. Preparing the Data
-    # =============================================================================
-    print("\n2.4. Preparing the Data...")
+    # data preparation
+    data_dir = os.path.join(DATA_DIR, "proteins", "datasets")
     
-    # 2.4.1. Loading the CAFA3 Data
-    print("2.4.1. Loading the CAFA3 Data...")
-    
-    # Note: In a real implementation, you would download these files
-    # For now, we'll create dummy data to demonstrate the structure
-    print("Creating dummy CAFA3-like data...")
-    
-    # Create dummy labels dataframe
-    n_proteins = 1000
-    n_go_terms = 50
-    
-    dummy_labels = []
-    for protein_id in range(n_proteins):
-        # Each protein gets 2-5 random GO terms
-        n_terms = np.random.randint(2, 6)
-        terms = np.random.choice(n_go_terms, n_terms, replace=False)
-        for term in terms:
-            dummy_labels.append({
-                'EntryID': f'PROTEIN_{protein_id:06d}',
-                'term': f'GO:{term:07d}',
-                'aspect': 'MFO'
-            })
-    
-    labels = pd.DataFrame(dummy_labels)
-    print(f"Created {len(labels)} protein-function annotations")
-    
-    # Create dummy GO term descriptions
-    go_descriptions = []
-    for i in range(n_go_terms):
-        go_descriptions.append({
-            'term': f'GO:{i:07d}',
-            'description': f'Molecular function {i}'
-        })
-    
-    go_term_descriptions = pd.DataFrame(go_descriptions)
-    go_term_descriptions.to_csv(assets("go_term_descriptions.csv"), index=False)
-    
-    # Merge labels with descriptions
-    labels = labels.merge(go_term_descriptions, on="term")
-    print(f"Labels with descriptions: {len(labels)} rows")
-    
-    # Create dummy protein sequences
-    amino_acids = list("ARNDCQEGHILKMFPSTWYV")
-    sequences = []
-    for protein_id in range(n_proteins):
-        # Random sequence length between 50-500
-        seq_len = np.random.randint(50, 500)
-        sequence = ''.join(np.random.choice(amino_acids, seq_len))
-        sequences.append({
-            'EntryID': f'PROTEIN_{protein_id:06d}',
-            'Sequence': sequence,
-            'Length': seq_len,
-            'taxonomyID': 9606  # Human
-        })
-    
-    sequence_df = pd.DataFrame(sequences)
-    
-    # Merge with taxonomy and labels
-    sequence_df = sequence_df.merge(labels, on="EntryID")
-    print(f"Final dataset: {sequence_df['EntryID'].nunique()} proteins with {sequence_df['term'].nunique()} functions")
-    
-    # Filter for common functions (appears in at least 10 proteins)
-    common_functions = (
-        sequence_df["term"]
-        .value_counts()[sequence_df["term"].value_counts() >= 10]
-        .index
+    # load GO term descriptions
+    go_term_descriptions = get_go_term_descriptions(
+        os.path.join(data_dir, "go_term_descriptions.csv")
     )
-    sequence_df = sequence_df[sequence_df["term"].isin(common_functions)]
-    print(f"After filtering: {sequence_df['EntryID'].nunique()} proteins with {sequence_df['term'].nunique()} functions")
+    print(f"Loaded {len(go_term_descriptions)} GO term descriptions")
     
-    # Convert to multi-label format
-    sequence_df = (
-        sequence_df[["EntryID", "Sequence", "Length", "term"]]
-        .assign(value=1)
-        .pivot(
-            index=["EntryID", "Sequence", "Length"], columns="term", values="value"
+    # Check if we have pre-computed embeddings
+    model_name = "facebook/esm2_t30_150M_UR50D"
+    train_file = os.path.join(data_dir, f"protein_dataset_train_{model_name.replace('/', '_')}.feather")
+    
+    if os.path.exists(train_file):
+        print("Loading pre-computed embeddings...")
+        
+        # load the datasets
+        train_df = load_sequence_embeddings(
+            os.path.join(data_dir, "protein_dataset_train"),
+            model_name
         )
-        .fillna(0)
-        .astype(int)
-        .reset_index()
-    )
-    print(f"Multi-label format: {sequence_df.shape}")
-    
-    # Filter by length
-    sequence_df = sequence_df[sequence_df["Length"] <= 500]
-    print(f"After length filter: {sequence_df.shape}")
-    
-    # 2.4.2. Splitting the Dataset
-    print("2.4.2. Splitting the Dataset...")
-    
-    train_sequence_ids, valid_test_sequence_ids = train_test_split(
-        list(set(sequence_df["EntryID"])), test_size=0.40, random_state=42
-    )
-    valid_sequence_ids, test_sequence_ids = train_test_split(
-        valid_test_sequence_ids, test_size=0.50, random_state=42
-    )
-    
-    sequence_splits = {
-        "train": sequence_df[sequence_df["EntryID"].isin(train_sequence_ids)],
-        "valid": sequence_df[sequence_df["EntryID"].isin(valid_sequence_ids)],
-        "test": sequence_df[sequence_df["EntryID"].isin(test_sequence_ids)],
-    }
-    
-    for split, df in sequence_splits.items():
-        print(f"{split} has {len(df)} entries.")
-    
-    # =============================================================================
-    # 2.4.3. Converting Protein Sequences into Their Mean Embeddings
-    # =============================================================================
-    print("\n2.4.3. Converting Protein Sequences into Their Mean Embeddings...")
-    
-    model_checkpoint = "facebook/esm2_t30_150M_UR50D"
-    print(f"Loading ESM2 model: {model_checkpoint}")
-    
-    tokenizer = AutoTokenizer.from_pretrained(model_checkpoint)
-    model = EsmModel.from_pretrained(model_checkpoint)
-    
-    # Store embeddings for each split
-    for split, df in sequence_splits.items():
-        print(f"Processing {split} split...")
-        store_sequence_embeddings(
-            sequence_df=df,
-            store_prefix=assets(f"protein_dataset_{split}"),
-            tokenizer=tokenizer,
-            model=model,
+        valid_df = load_sequence_embeddings(
+            os.path.join(data_dir, "protein_dataset_valid"),
+            model_name
         )
+        test_df = load_sequence_embeddings(
+            os.path.join(data_dir, "protein_dataset_test"),
+            model_name
+        )
+        
+        print(f"Loaded pre-computed data: train={train_df.shape}, valid={valid_df.shape}, test={test_df.shape}")
+        
+    else:
+        print("Pre-computed embeddings not found. Generating from raw data...")
+        
+        # Load raw CAFA3 data
+        protein_df, go_columns = load_cafa3_data(data_dir)
+        
+        # Create train/valid/test splits
+        train_df, valid_df, test_df = create_train_valid_test_splits(protein_df)
+        
+        # Generate ESM2 embeddings
+        splits = generate_embeddings(train_df, valid_df, test_df, model_name)
+        train_df, valid_df, test_df = splits['train'], splits['valid'], splits['test']
     
-    # Load the training data back
-    train_df = load_sequence_embeddings(
-        assets("protein_dataset_train"),
-        model_checkpoint=model_checkpoint,
-    )
-    print(f"Loaded training data: {train_df.shape}")
+    print(f"Final data shapes: train={train_df.shape}, valid={valid_df.shape}, test={test_df.shape}")
+    print(f"Columns: {list(train_df.columns)}")
     
-    # =============================================================================
-    # 2.5. Training the Model
-    # =============================================================================
-    print("\n2.5. Training the Model...")
+    # Get target columns (GO terms)
+    targets = [col for col in train_df.columns if col.startswith("GO:")]
+    print(f"Number of target functions: {len(targets)}")
     
-    # Build dataset splits
+    # build dataset splits
     dataset_splits = {}
-    for split in ["train", "valid", "test"]:
+    for split, df in [("train", train_df), ("valid", valid_df), ("test", test_df)]:
         dataset_splits[split] = convert_to_tfds(
-            df=load_sequence_embeddings(
-                store_file_prefix=f"{assets('protein_dataset')}_{split}",
-                model_checkpoint=model_checkpoint,
-            ),
+            df=df,
             is_training=(split == "train"),
         )
     
-    # Get a batch to initialize the model
+    # get a batch to initialize the model
     batch_size = 32
     batch = next(dataset_splits["train"].batch(batch_size).as_numpy_iterator())
     print(f"Batch shapes: embedding={batch['embedding'].shape}, target={batch['target'].shape}")
     
-    # Initialize model
-    targets = list(train_df.columns[train_df.columns.str.contains("GO:")])
-    print(f"Number of target functions: {len(targets)}")
-    
+    # initialize model
     mlp = Model(num_targets=len(targets))
     
-    # Initialize training state
+    # initialize training state
     rng = jax.random.PRNGKey(42)
     rng, rng_init = jax.random.split(key=rng, num=2)
     
@@ -213,7 +116,7 @@ def main():
         tx=optax.adam(0.001)
     )
     
-    # Train the model
+    # train the model
     print("Starting training...")
     state, metrics = train(
         state=state,
@@ -223,18 +126,10 @@ def main():
         eval_every=30,
     )
     
-    # =============================================================================
-    # 2.5.2. Examining the Model Predictions
-    # =============================================================================
+    # evaluation
     print("\n2.5.2. Examining the Model Predictions...")
     
-    # Load validation data
-    valid_df = load_sequence_embeddings(
-        store_file_prefix=f"{assets('protein_dataset')}_valid",
-        model_checkpoint=model_checkpoint,
-    )
-    
-    # Generate predictions
+    # generate predictions
     valid_probs = []
     for valid_batch in dataset_splits["valid"].batch(1).as_numpy_iterator():
         logits = state.apply_fn({"params": state.params}, x=valid_batch["embedding"])
@@ -247,7 +142,7 @@ def main():
     
     print(f"Validation predictions shape: {valid_prob_df.shape}")
     
-    # Calculate metrics by function
+    # calculate metrics by function
     metrics_by_function = {}
     for function in targets:
         metrics_by_function[function] = compute_metrics(
@@ -264,9 +159,7 @@ def main():
     print("\nTop 10 performing functions:")
     print(overview_valid.head(10)[["description", "auprc", "auroc"]])
     
-    # =============================================================================
-    # 2.5.4. Final Check on Test Set
-    # =============================================================================
+    # final check on test set
     print("\n2.5.4. Final Check on Test Set...")
     
     eval_metrics = []
@@ -282,7 +175,6 @@ def main():
     print("Final Results:")
     print(final_results)
     
-    print("\n=== Chapter 2 Complete ===")
     print("Model trained successfully!")
     print(f"Final validation AUPRC: {final_results[final_results['split'] == 'valid']['auprc'].iloc[0]:.4f}")
     print(f"Final test AUPRC: {final_results[final_results['split'] == 'test']['auprc'].iloc[0]:.4f}")

@@ -61,16 +61,27 @@ def compute_metrics(
         return {
             m: 0.0 for m in ["accuracy", "recall", "precision", "auprc", "auroc"]
         }
+    
+    # Convert to numpy arrays if needed
+    targets = np.asarray(targets)
+    probs = np.asarray(probs)
+    
+    # Compute predictions
+    predictions = (probs >= thresh).astype(int)
+    
+    # Compute metrics
+    accuracy = metrics.accuracy_score(targets, predictions)
+    recall = metrics.recall_score(targets, predictions, zero_division=0.0)
+    precision = metrics.precision_score(targets, predictions, zero_division=0.0)
+    auprc = metrics.average_precision_score(targets, probs)
+    auroc = metrics.roc_auc_score(targets, probs)
+    
     return {
-        "accuracy": metrics.accuracy_score(targets, probs >= thresh),
-        "recall": metrics.recall_score(targets, probs >= thresh).item(),
-        "precision": metrics.precision_score(
-            targets,
-            probs >= thresh,
-            zero_division=0.0,
-        ).item(),
-        "auprc": metrics.average_precision_score(targets, probs).item(),
-        "auroc": metrics.roc_auc_score(targets, probs).item(),
+        "accuracy": float(accuracy),
+        "recall": float(recall),
+        "precision": float(precision),
+        "auprc": float(auprc),
+        "auroc": float(auroc),
     }
 
 @jax.jit
@@ -100,7 +111,7 @@ def eval_step(state, batch) -> Dict[str, float]:
         target_metrics.append(compute_metrics(target, prob))
     
     metrics_dict = {
-        "loss": loss.item(),
+        "loss": float(loss),
         **pd.DataFrame(target_metrics).mean(axis=0).to_dict(),
     }
     return metrics_dict
@@ -129,7 +140,7 @@ def train(
 
         # Get batch of training data, convert into a JAX array, and train.
         state, loss = train_step(state, next(train_batches))
-        train_metrics.append({"step": step, "loss": loss.item()})
+        train_metrics.append({"step": step, "loss": float(loss)})
 
         if step % eval_every == 0:
             # For all the evaluation batches, calculate metrics.
