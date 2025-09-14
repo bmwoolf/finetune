@@ -16,5 +16,7 @@ uv run dlfb-provision --chapter proteins --destination ./data
 
 # execute the finetuning training loop and run an analysis
 cd ../
-uv run python main.py
+uv run python example/main.py
+# or
+uv run finetune
 ```

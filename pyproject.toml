@@ -41,8 +41,6 @@ dependencies = [
     "ml-dtypes==0.5.1",
     "tensorstore==0.1.72",
     "orbax-checkpoint==0.11.9",
-    "jax-cuda12-pjrt==0.5.1",
-    "jax-cuda12-plugin==0.5.1",
 ]
 
 [build-system]
