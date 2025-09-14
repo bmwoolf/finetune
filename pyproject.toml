@@ -11,7 +11,7 @@ dependencies = [
     "numpy>=2.3.3",
     "pandas>=2.0.0",
     "obonet>=1.1.0",
-    "jax>=0.4.0",
+    "jax[cuda12-pip]>=0.4.0",
     "jaxlib>=0.4.0",
     "flax>=0.7.0",
     "optax>=0.1.0",
@@ -41,6 +41,7 @@ dependencies = [
     "ml-dtypes==0.5.1",
     "tensorstore==0.1.72",
     "orbax-checkpoint==0.11.9",
+    "jax-cuda12-plugin>=0.7.1",
 ]
 
 [build-system]
