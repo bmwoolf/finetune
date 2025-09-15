@@ -138,7 +138,7 @@ def main():
         eval_every=100,
     )
     
-    # 1. training progress
+    # training progress
     print("Plotting training progress...")
     plot_training_progress(metrics)
     
@@ -175,11 +175,11 @@ def main():
     print("\nTop 10 performing functions:")
     print(overview_valid.head(10)[["description", "auprc", "auroc"]])
     
-    # 2. function analysis
+    # function analysis
     print("Plotting function analysis...")
     plot_function_analysis(overview_valid, targets, valid_true_df, valid_prob_df)
     
-    # 3. predictions analysis
+    # predictions analysis
     print("Plotting predictions analysis...")
     plot_predictions_analysis(valid_true_df, valid_prob_df, targets)
     
