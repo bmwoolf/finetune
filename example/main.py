@@ -8,6 +8,7 @@ import jax
 import jax.numpy as jnp
 import torch
 import optax
+import pickle
 from pathlib import Path
 
 # add the parent directory to the path so we can import tools
@@ -137,6 +138,38 @@ def main():
         num_steps=2000,
         eval_every=100,
     )
+    
+    # save the trained model
+    print("Saving trained model...")
+    model_save_path = BASE_DIR / "example" / "models" / "protein_function_model.pkl"
+    
+    # save the complete training state and metadata
+    model_data = {
+        'params': state.params,
+        'num_targets': len(targets),
+        'targets': targets,
+        'model_config': {
+            'dim': 256,
+            'num_targets': len(targets)
+        },
+        'training_config': {
+            'batch_size': batch_size,
+            'num_steps': 2000,
+            'learning_rate': 0.001,
+            'model_name': model_name
+        },
+        'final_metrics': {
+            'train_loss': metrics['train'][-1]['loss'],
+            'valid_loss': metrics['valid'][-1]['loss'] if metrics['valid'] else None,
+            'valid_auprc': metrics['valid'][-1]['auprc'] if metrics['valid'] and 'auprc' in metrics['valid'][-1] else None
+        }
+    }
+    
+    with open(model_save_path, 'wb') as f:
+        pickle.dump(model_data, f)
+    
+    print(f"Model saved to: {model_save_path}")
+    print(f"Model size: {model_save_path.stat().st_size / (1024*1024):.2f} MB")
     
     # training progress
     print("Plotting training progress...")
