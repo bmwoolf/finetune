@@ -2,7 +2,7 @@
 
 # Finetuning Toolkit
 
-A finetuning toolkit for working with protein models like ESM2. Uses JAX/Flax for multi-label classification of protein functions. Currently uses the dataset + function inspiration from the book ![Deep Learning for Biology](https://deep-learning-for-biology.com/).
+A finetuning toolkit for working with protein models like ESM2. Uses JAX/Flax for multi-label classification of protein functions. Currently uses the dataset + function inspiration from the book [Deep Learning for Biology](https://deep-learning-for-biology.com/).
 
 ## Installation
 
