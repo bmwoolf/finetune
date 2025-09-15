@@ -8,6 +8,7 @@ from typing import List, Tuple
 from sklearn.model_selection import train_test_split
 from transformers import AutoTokenizer, EsmModel
 from .utils import get_device
+from .triton_masked_mean import masked_mean_pool
 
 # handling protein data
 def get_go_term_descriptions(store_path: str) -> pd.DataFrame:
@@ -159,22 +160,36 @@ def get_mean_embeddings(
     if not device:
         device = get_device()
 
-    # Tokenize input sequences and pad them to equal length.
+    # tokenize model inputs and move to the device (GPU or CPU)
     model_inputs = tokenizer(sequences, padding=True, return_tensors="pt")
-
-    # Move tokenized inputs to the target device (CPU or GPU).
     model_inputs = {k: v.to(device) for k, v in model_inputs.items()}
-
-    # Move model to the target device and set it to evaluation mode.
     model = model.to(device)
     model.eval()
 
-    # Forward pass without gradient tracking to obtain embeddings.
     with torch.no_grad():
-        outputs = model(**model_inputs)
-        mean_embeddings = outputs.last_hidden_state.mean(dim=1)
+        outputs = model(**model_inputs)      # last_hidden_state: [B, L, D]             
+        hidden = outputs.last_hidden_state   # [B, L, D]
 
-    return mean_embeddings.detach().cpu().numpy()
+        if "attention_mask" in model_inputs:
+            # prefer tokenizer's attention_mask
+            mask = model_inputs["attention_mask"].to(hidden.dtype)  # [B, L]
+        else:
+            # fall back to pad_token_id check
+            pad_id = getattr(tokenizer, "pad_token_id", None)
+            if pad_id is None:
+                raise ValueError("No attention_mask and tokenizer.pad_token_id is None.")
+            mask = (model_inputs["input_ids"] != pad_id).to(hidden.dtype)
+
+        # masked mean over sequence length
+        # sum over tokens, divide by number of real tokens (avoid div-by-0)
+        masked_sum = (hidden * mask.unsqueeze(-1)).sum(dim=1)      # [B, D]
+        counts = mask.sum(dim=1, keepdim=True).clamp(min=1.0)      # [B, 1]
+
+        # Triton masked mean (excludes sequence pads)
+        # note: wrapper handles launch/grid/strides
+        pooled = masked_mean_pool(hidden, mask)
+
+    return pooled.detach().cpu().numpy()
 
 def store_sequence_embeddings(
     sequence_df: pd.DataFrame,

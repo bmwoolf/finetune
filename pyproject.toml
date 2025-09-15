@@ -42,6 +42,7 @@ dependencies = [
     "tensorstore==0.1.72",
     "orbax-checkpoint==0.11.9",
     "jax-cuda12-plugin>=0.7.1",
+    "triton>=3.4.0",
 ]
 
 [build-system]
