@@ -34,7 +34,7 @@ uv add jax-cuda12-plugin --extra-index-url https://storage.googleapis.com/jax-re
 ```
 
 
-## Usage
+## Running Example Training 
 
 ### Training with GPU
 
