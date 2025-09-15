@@ -32,6 +32,12 @@ from tools.model import (
     train
 )
 from tools.utils import assets, get_device, DATA_DIR
+from tools.visualization import (
+    plot_training_progress,
+    plot_function_analysis,
+    plot_predictions_analysis,
+    plot_metrics_summary
+)
 
 # set up paths for local environment
 BASE_DIR = Path(__file__).parent.parent
@@ -132,6 +138,10 @@ def main():
         eval_every=100,
     )
     
+    # 1. training progress
+    print("Plotting training progress...")
+    plot_training_progress(metrics)
+    
     # evaluation
     print("\nExamining the Model Predictions")
     
@@ -165,6 +175,14 @@ def main():
     print("\nTop 10 performing functions:")
     print(overview_valid.head(10)[["description", "auprc", "auroc"]])
     
+    # 2. function analysis
+    print("Plotting function analysis...")
+    plot_function_analysis(overview_valid, targets, valid_true_df, valid_prob_df)
+    
+    # 3. predictions analysis
+    print("Plotting predictions analysis...")
+    plot_predictions_analysis(valid_true_df, valid_prob_df, targets)
+    
     # final check on test set
     print("\nFinal Check on Test Set")
     
@@ -180,6 +198,10 @@ def main():
     final_results = pd.DataFrame(eval_metrics)
     print("Final Results:")
     print(final_results)
+    
+    # 4. final metrics summary
+    print("Plotting final metrics summary...")
+    plot_metrics_summary(final_results)
     
     print("Model trained successfully!")
     print(f"Final validation AUPRC: {final_results[final_results['split'] == 'valid']['auprc'].iloc[0]:.4f}")
