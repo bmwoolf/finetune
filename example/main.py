@@ -10,7 +10,8 @@ import torch
 import optax
 from pathlib import Path
 
-# Add the parent directory to the path so we can import tools
+# add the parent directory to the path so we can import tools
+# will need to clean this up
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from tools.data import (
@@ -52,7 +53,7 @@ def main():
     )
     print(f"Loaded {len(go_term_descriptions)} GO term descriptions")
     
-    # Check if we have pre-computed embeddings
+    # check if we have pre-computed embeddings
     model_name = "facebook/esm2_t30_150M_UR50D"
     train_file = os.path.join(data_dir, f"protein_dataset_train_{model_name.replace('/', '_')}.feather")
     
@@ -76,22 +77,22 @@ def main():
         print(f"Loaded pre-computed data: train={train_df.shape}, valid={valid_df.shape}, test={test_df.shape}")
         
     else:
-        print("Pre-computed embeddings not found. Generating from raw data...")
+        print("Pre-computed embeddings not found. Generating from raw data")
         
-        # Load raw CAFA3 data
+        # load raw CAFA3 data
         protein_df, go_columns = load_cafa3_data(data_dir)
         
-        # Create train/valid/test splits
+        # create train/valid/test splits
         train_df, valid_df, test_df = create_train_valid_test_splits(protein_df)
         
-        # Generate ESM2 embeddings
+        # generate ESM2 embeddings
         splits = generate_embeddings(train_df, valid_df, test_df, model_name)
         train_df, valid_df, test_df = splits['train'], splits['valid'], splits['test']
     
     print(f"Final data shapes: train={train_df.shape}, valid={valid_df.shape}, test={test_df.shape}")
     print(f"Columns: {list(train_df.columns)}")
     
-    # Get target columns (GO terms)
+    # get target columns (GO terms)
     targets = [col for col in train_df.columns if col.startswith("GO:")]
     print(f"Number of target functions: {len(targets)}")
     
@@ -127,12 +128,12 @@ def main():
         state=state,
         dataset_splits=dataset_splits,
         batch_size=batch_size,
-        num_steps=300,
-        eval_every=30,
+        num_steps=2000,
+        eval_every=100,
     )
     
     # evaluation
-    print("\n2.5.2. Examining the Model Predictions...")
+    print("\nExamining the Model Predictions")
     
     # generate predictions
     valid_probs = []
@@ -165,7 +166,7 @@ def main():
     print(overview_valid.head(10)[["description", "auprc", "auroc"]])
     
     # final check on test set
-    print("\n2.5.4. Final Check on Test Set...")
+    print("\nFinal Check on Test Set")
     
     eval_metrics = []
     for split in ["valid", "test"]:
