@@ -33,10 +33,9 @@ uv add "jax[cuda12_pip]" --extra-index-url https://storage.googleapis.com/jax-re
 uv add jax-cuda12-plugin --extra-index-url https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 ```
 
-
 ## Running Example Training 
 
-### Training with GPU
+### Training (GPU recommended)
 
 ```bash
 # Run with GPU support (recommended)
@@ -44,14 +43,13 @@ XLA_FLAGS=--xla_gpu_cuda_data_dir=/tmp/cuda_data uv run python example/main.py
 
 # Or use the command-line interface
 XLA_FLAGS=--xla_gpu_cuda_data_dir=/tmp/cuda_data uv run finetune
-```
 
-### Training with CPU-only (if needed)
-
-```bash
 # Run with CPU fallback
 JAX_PLATFORMS=cpu uv run python example/main.py
 ```
+
+### Model Size
+In our specific example, we use `facebook/esm2_t30_150M_UR50D`, but it consumes about ~10GB GPU memory and ~4GB RAM. There are other model sizes if you have larger or smaller GPUs.
 
 
 ### Set up libdevice (if needed)
