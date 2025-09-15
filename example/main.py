@@ -8,6 +8,7 @@ import jax
 import jax.numpy as jnp
 import torch
 import optax
+import pickle
 from pathlib import Path
 
 # add the parent directory to the path so we can import tools
@@ -138,7 +139,39 @@ def main():
         eval_every=100,
     )
     
-    # 1. training progress
+    # save the trained model
+    print("Saving trained model...")
+    model_save_path = BASE_DIR / "example" / "models" / "protein_function_model.pkl"
+    
+    # save the complete training state and metadata
+    model_data = {
+        'params': state.params,
+        'num_targets': len(targets),
+        'targets': targets,
+        'model_config': {
+            'dim': 256,
+            'num_targets': len(targets)
+        },
+        'training_config': {
+            'batch_size': batch_size,
+            'num_steps': 2000,
+            'learning_rate': 0.001,
+            'model_name': model_name
+        },
+        'final_metrics': {
+            'train_loss': metrics['train'][-1]['loss'],
+            'valid_loss': metrics['valid'][-1]['loss'] if metrics['valid'] else None,
+            'valid_auprc': metrics['valid'][-1]['auprc'] if metrics['valid'] and 'auprc' in metrics['valid'][-1] else None
+        }
+    }
+    
+    with open(model_save_path, 'wb') as f:
+        pickle.dump(model_data, f)
+    
+    print(f"Model saved to: {model_save_path}")
+    print(f"Model size: {model_save_path.stat().st_size / (1024*1024):.2f} MB")
+    
+    # training progress
     print("Plotting training progress...")
     plot_training_progress(metrics)
     
@@ -175,11 +208,11 @@ def main():
     print("\nTop 10 performing functions:")
     print(overview_valid.head(10)[["description", "auprc", "auroc"]])
     
-    # 2. function analysis
+    # function analysis
     print("Plotting function analysis...")
     plot_function_analysis(overview_valid, targets, valid_true_df, valid_prob_df)
     
-    # 3. predictions analysis
+    # predictions analysis
     print("Plotting predictions analysis...")
     plot_predictions_analysis(valid_true_df, valid_prob_df, targets)
     
